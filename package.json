@@ -1,13 +1,14 @@
 {
   "name": "dsh-pet-bridge",
-  "version": "0.1.0",
-  "description": "Route DeepSeek Harness desktop-pet chat to your live session agent (patches dsh-pet).",
+  "version": "0.2.0",
+  "description": "更聪明的大肥鱼对话（花token版）：把桌宠 dsh-pet 的对话接到当前 DSH 会话。Route desktop-pet chat to your live session agent.",
   "type": "module",
   "bin": {
     "dsh-pet-bridge": "./patch.mjs"
   },
   "files": [
     "patch.mjs",
+    "SKILL.md",
     "README.md",
     "LICENSE"
   ],
@@ -20,7 +21,8 @@
     "dsh",
     "dsh-pet",
     "desktop-pet",
-    "bridge"
+    "bridge",
+    "skill"
   ],
   "license": "MIT",
   "engines": {

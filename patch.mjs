@@ -44,8 +44,8 @@ if (revert) {
 const BRIDGE = `//#region pet-bridge: 把桌宠对话转发给当前会话里的本体
 const PET_BRIDGE_TIMEOUT_MS = 180000;
 let petBridgeSessionId = null;
-/** 桥接刚答过一轮：抑制本轮的 success 工作状态，避免顶掉聊天气泡 */
-let petBridgeJustAnswered = false;
+/** 桥接刚答过的静默窗口：这段时间内不弹状态文案、不发完成通知，避免顶掉聊天气泡 */
+let petBridgeQuietUntil = 0;
 const petBridgeWaiters = new Map();
 function petBridgeLog(data) {
 \ttry {
@@ -71,7 +71,7 @@ function petBridgeResolve(sessionId, event, type) {
 \t\treturn;
 \t}
 \tpetBridgeWaiters.delete(sessionId);
-\tif (waiter.last) petBridgeJustAnswered = true;
+\tif (waiter.last) petBridgeQuietUntil = Date.now() + 30000;
 \twaiter.finish(waiter.last || "");
 }
 function petBridgeAsk(ctx, text) {
@@ -156,8 +156,7 @@ const EDITS = [
 \t\tconst snap = workStatus.snapshot();`,
     replace: `\tconst publishWorkStatus = () => {
 \t\tconst snap = workStatus.snapshot();
-\t\tif (snap.state === "success" && petBridgeJustAnswered) {
-\t\t\tpetBridgeJustAnswered = false;
+\t\tif (snap.state === "success" && Date.now() < petBridgeQuietUntil) {
 \t\t\tpublishedWork = "null\\0" + String(snap.task);
 \t\t\tpublishedState = null;
 \t\t\tpublishedTask = snap.task;
@@ -165,6 +164,14 @@ const EDITS = [
 \t\t\tstate.writeSection("workStatus", { state: null, task: snap.task });
 \t\t\treturn;
 \t\t}`,
+  },
+  {
+    label: '桥接答过的那一轮不发完成通知（否则结束语会顶掉聊天气泡）',
+    find: `\t\t\t\tif (!shouldNotifySession(session)) return;
+\t\t\t\tif (isCompletionTurnEnd(event)) {`,
+    replace: `\t\t\t\tif (!shouldNotifySession(session)) return;
+\t\t\t\tif (Date.now() < petBridgeQuietUntil) return;
+\t\t\t\tif (isCompletionTurnEnd(event)) {`,
   },
 ];
 

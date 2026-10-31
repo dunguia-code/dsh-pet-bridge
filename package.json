@@ -1,0 +1,29 @@
+{
+  "name": "dsh-pet-bridge",
+  "version": "0.1.0",
+  "description": "Route DeepSeek Harness desktop-pet chat to your live session agent (patches dsh-pet).",
+  "type": "module",
+  "bin": {
+    "dsh-pet-bridge": "./patch.mjs"
+  },
+  "files": [
+    "patch.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "patch": "node patch.mjs",
+    "revert": "node patch.mjs --revert"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-pet",
+    "desktop-pet",
+    "bridge"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

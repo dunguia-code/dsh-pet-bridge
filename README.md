@@ -29,10 +29,11 @@ node patch.mjs --profile=web     # 或指定别的 profile
 node patch.mjs --revert
 ```
 
-它会用安装时留下的备份覆盖回去。备份文件在同目录：
+它会用安装时留下的备份覆盖回去（宿主与前端两处）。备份文件在同目录：
 
 ```
 node_modules/dsh-pet/lib/index.js.dsh-pet-bridge.bak
+node_modules/dsh-pet/lib/client.js.dsh-pet-bridge.bak
 ```
 
 重装或升级 `dsh-pet` 后补丁会丢，重新跑一次 `node patch.mjs` 即可（脚本会检测是否已打过）。
@@ -46,10 +47,10 @@ node_modules/dsh-pet/lib/index.js.dsh-pet-bridge.bak
 ## 限制（请先读）
 
 - **只有本体空闲时才转发。** 本体正在跑一轮时，补丁会自动回落到宠物自己的模型，避免把上一轮的回答错当成这一轮的。所以你可能会遇到"这次答得不像本体"的情况——看语气就能分辨。
-- **气泡装不下长回答。** 本体认真回答常常几百字，气泡会挤。想读完就回窗口看。
+- **气泡装不下长回答。** 补丁已把气泡最大宽度从 16f 放到 30f（约 277px → 519px），能排成方块了；但仍受桌宠窗口宽度限制（约 2× 桌宠尺寸），回答特别长时会往上顶出屏幕。想读完就回窗口看。
 - **投进去的是真正的 user 消息。** 也就是说那一轮 agent 有工具权限。**不要对宠物下达危险指令**（"帮我把系统关掉"之类），它会真的去做。
 - **不能带图。** 桥接走的是纯文本；宠物原来的表情包配图在这个模式下不发。
-- 依赖 `dsh-pet` 的内部实现（`lib/index.js` 里的 `generateChat` 与 `session/event` 监听），**上游改结构就会失效**。脚本会在补丁点命中数不为 1 时中止，不会写坏文件。
+- 依赖 `dsh-pet` 的内部实现（`lib/index.js` 的 `generateChat`/`publishWorkStatus`/通知监听，`lib/client.js` 的气泡样式），**上游改结构就会失效**。脚本会在补丁点命中数不为 1 时中止，不会写坏文件。
 
 ## 调试
 

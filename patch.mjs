@@ -7,10 +7,13 @@
  *   node patch.mjs --profile=web   # 指定 profile
  *   node patch.mjs --revert        # 还原（用备份覆盖）
  *
- * 它做三件事，全部在 dsh-pet 的 lib/index.js 里：
- *   1. 插入一个桥接模块（投递消息、等待回合结束、取回文字）
- *   2. 在 generateChat 入口先走桥接，失败自动回落到桌宠自己的模型
- *   3. 在 session/event 监听里记住最近活动的会话，并在 assistant/message / turn/end 上结算
+ * 它改两个文件：
+ *   lib/index.js（宿主）—— 3 处桥接 + 2 处静默窗
+ *     1. 插入一个桥接模块（投递消息、等待回合结束、取回文字）
+ *     2. 在 generateChat 入口先走桥接，失败自动回落到桌宠自己的模型
+ *     3. 在 session/event 监听里记住最近活动的会话，并在 assistant/message / turn/end 上结算
+ *     4/5. 桥接答过的回合压掉 success 状态与完成通知，否则它们会顶掉聊天气泡
+ *   lib/client.js（前端）—— 1 处加宽聊天气泡（16f → 30f），否则长回答被挤成竖条
  *
  * 设计约束：桌宠只在「本体空闲」时才转发，避免把上一轮的回答错当成这一轮的。
  */
@@ -24,6 +27,8 @@ const revert = argv.includes('--revert');
 
 const target = join(homedir(), '.dsh', 'profiles', profile, 'node_modules', 'dsh-pet', 'lib', 'index.js');
 const backup = `${target}.dsh-pet-bridge.bak`;
+const clientTarget = join(homedir(), '.dsh', 'profiles', profile, 'node_modules', 'dsh-pet', 'lib', 'client.js');
+const clientBackup = `${clientTarget}.dsh-pet-bridge.bak`;
 
 if (!existsSync(target)) {
   console.error(`找不到 dsh-pet：${target}`);
@@ -32,12 +37,19 @@ if (!existsSync(target)) {
 }
 
 if (revert) {
-  if (!existsSync(backup)) {
-    console.error(`没有备份可还原：${backup}`);
+  let restored = 0;
+  for (const [file, bak] of [[target, backup], [clientTarget, clientBackup]]) {
+    if (existsSync(bak)) {
+      copyFileSync(bak, file);
+      console.log(`已还原：${file}`);
+      restored += 1;
+    }
+  }
+  if (restored === 0) {
+    console.error('没有备份可还原（先从没打过补丁的 dsh-pet 装起才会有备份）。');
     process.exit(1);
   }
-  copyFileSync(backup, target);
-  console.log(`已还原：${target}`);
+  console.log('重启 DSH 后生效。');
   process.exit(0);
 }
 
@@ -178,26 +190,44 @@ const EDITS = [
 let source = readFileSync(target, 'utf8');
 
 if (source.includes('petBridgeAsk')) {
-  console.log('看起来已经打过补丁了（发现 petBridgeAsk），什么都不做。');
-  process.exit(0);
-}
-
-for (const edit of EDITS) {
-  const hits = source.split(edit.find).length - 1;
-  if (hits !== 1) {
-    console.error(`✗ 补丁点「${edit.label}」命中 ${hits} 次（应为 1）。`);
-    console.error('  说明你的 dsh-pet 版本与这个补丁不匹配，已中止，文件未被修改。');
-    process.exit(1);
+  console.log('宿主补丁已存在，跳过。');
+} else {
+  for (const edit of EDITS) {
+    const hits = source.split(edit.find).length - 1;
+    if (hits !== 1) {
+      console.error(`✗ 补丁点「${edit.label}」命中 ${hits} 次（应为 1）。`);
+      console.error('  说明你的 dsh-pet 版本与这个补丁不匹配，已中止，文件未被修改。');
+      process.exit(1);
+    }
+    source = source.replace(edit.find, edit.replace);
   }
-  source = source.replace(edit.find, edit.replace);
+
+  if (!existsSync(backup)) {
+    copyFileSync(target, backup);
+    console.log(`已备份 → ${backup}`);
+  }
+
+  writeFileSync(target, source, 'utf8');
+  console.log(`✓ 宿主补丁完成：${target}`);
 }
 
-if (!existsSync(backup)) {
-  copyFileSync(target, backup);
-  console.log(`已备份 → ${backup}`);
+// ---- 前端：加宽聊天气泡（否则长回答被挤成一根竖条） ----
+if (existsSync(clientTarget)) {
+  const OLD = 'max-width:min(calc(var(--f)*16),100%)';
+  const NEW = 'max-width:min(calc(var(--f)*30),100%)';
+  const client = readFileSync(clientTarget, 'utf8');
+  if (client.includes(NEW)) {
+    console.log('气泡宽度已是 30f，跳过。');
+  } else if (client.split(OLD).length - 1 === 1) {
+    if (!existsSync(clientBackup)) copyFileSync(clientTarget, clientBackup);
+    writeFileSync(clientTarget, client.replace(OLD, NEW), 'utf8');
+    console.log('✓ 气泡加宽完成：16f → 30f（约 277px → 519px）');
+  } else {
+    console.error('✗ 客户端气泡样式锚点未命中（版本不同），已跳过。宿主补丁不受影响。');
+  }
+} else {
+  console.log('没有 client.js，跳过气泡加宽。');
 }
 
-writeFileSync(target, source, 'utf8');
-console.log(`✓ 补丁完成：${target}`);
-console.log('  重启 DSH 后生效；桌宠气泡会显示本体的回答。');
-console.log('  调试信息写在 ~/.dsh/pet-bridge-debug.json。');
+console.log('重启 DSH 后生效（前端改动按 Ctrl+R 刷新页面通常就够）。');
+console.log('调试信息写在 ~/.dsh/pet-bridge-debug.json。');
